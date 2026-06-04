@@ -136,7 +136,7 @@ Together, these visualizations help reveal patterns that are often hidden when l
 
 ---
 
-## Skills Demonstrated
+## Skills 🥵🔥
 
 ### Statistics
 
