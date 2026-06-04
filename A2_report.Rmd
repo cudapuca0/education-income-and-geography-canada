@@ -1,0 +1,564 @@
+---
+title: "Does Education Translate Into Higher Income Equally Across Canada?"
+author: "Cuauhtemoc Daniel Puente Cavazos & Gabriella Sampaio Flores"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+gen_ai_statement: "Generative AI was used for the editing and formatting of our text, as well as debugging."
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: truew
+    theme: readable
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(scales)
+library(sf)
+library(geodata)
+library(ggrepel)
+library(ggiraph)
+```
+
+# Introduction 
+
+Our geographical location and area of study are two choices that can indirectly shape the course of our economic lives. Education is often described as the most reliable path toward upward mobility. We are told that investing in knowledge will eventually pay off, that the effort will translate into opportunity, yet education does not exist in isolation: it unfolds within a specific place within particular labor markets, industries, and regional economies. A degree earned in one context may carry different economic returns in another.
+
+In Canada, higher educational opportunities are generally associated with higher income and improved labor market outcomes. However, economic opportunity is not evenly distributed across the country. Large metropolitan areas like the GTA tend to concentrate industries, corporate headquarters, research institutions, and high-skilled employment. Non-metropolitan regions often operate within different economic structures, shaped by distinct labor demands and regional industries.
+
+This raises an important question:
+
+**Does education translate into higher income equally across metropolitan and non-metropolitan areas in Canada?**
+
+This data-driven article examines that question using the 2021 Census Public Use Microdata File (PUMF). By comparing income distributions, earnings by field of study, and patterns across the income spectrum, this analysis explores how Canadian geography interacts with education to shape economic outcomes. By the end of this article, you will understand whether its economic return depends on where individuals live and work.
+
+# Dataset
+
+The data used in this analysis come from:
+
+Statistics Canada (2023). Individuals File, 2021 Census of Population [Canada] (Public Use Microdata Files), Census year 2021. Borealis, V6. The files were downloaded from ODESI on September 10, 2025. Using these datasets, we examine how income distributions and returns to education differ across geographic contexts within Canada.
+
+To conduct the analysis, the dataset was first cleaned to include the variables necessary for the study, including after-tax income, major field of study, geographic area type, and the person-level weight (WEIGHT). The geographic variable was used to classify individuals into metropolitan and non-metropolitan areas, allowing us to compare income outcomes across different geographic contexts. The field of study variable was also re-coded so that numeric category codes correspond to their descriptive labels, making the results easier to interpret in the visualizations.
+
+Income measures were then summarized using weighted statistics to ensure that the results accurately represent the Canadian population. More specifically, weighted means and weighted percentiles were calculated using the WEIGHT variable. These measures were used to construct visualizations comparing income across metropolitan and non-metropolitan areas, as well as differences in income by field of study.
+
+In the visualizations we created, income is mapped to either the vertical or horizontal axis, while geographic variation is encoded using different colors and grouping. All of the summaries and distributions provided are calculated using WEIGHT to produce correct population-representative estimates.
+
+
+```{r, echo=FALSE}
+
+other <- read_csv("census_21_other.csv")
+metro <- read_csv("census_21_metro.csv")
+
+metro$area_type <- "Metropolitan"
+other$area_type <- "Other"
+
+census <- bind_rows(metro, other)
+```
+
+```{r, , include=FALSE}
+census_clean <- census %>%
+  mutate(
+    income = as.numeric(TotInc_AT),   
+    edu = as.factor(CIP2021),
+    wt = as.numeric(WEIGHT),         
+    area_type = as.factor(area_type)
+  ) %>%
+  filter(!is.na(income), !is.na(edu), !is.na(wt)) %>%
+  filter(!(income %in% c(88888888, 99999999)))
+
+
+
+```
+
+
+```{r, include=FALSE}
+glimpse(census)
+colnames(census)
+
+```
+
+
+```{r, include=FALSE}
+#library(tidyverse)
+#library(scales)
+
+#cdf_data <- census_clean %>%
+ # arrange(income) %>%
+  #group_by(area_type) %>%
+  # mutate(
+    #cum_weight = cumsum(wt),
+    #cum_prop = cum_weight / sum(wt)
+  #)
+
+#ggplot(cdf_data, aes(x = income, y = cum_prop, color = area_type)) +
+ # geom_line(size = 1) +
+  #scale_x_continuous(labels = dollar_format()) +
+  #labs(
+   # title = "Cumulative Income Distribution by Area Type",
+  #  x = "After-Tax Income",
+   # y = "Cumulative Proportion",
+    #color = "Area Type"
+  #) +
+  #theme_minimal()
+```
+
+# Does Place Shape Pay? Education and Income Across Canadian Regions
+
+Before exploring how education and geography interact, it is helpful to first understand how income is distributed across metropolitan and non-metropolitan areas. Looking only at averages can hide important differences across the population. Two regions may have similar average incomes while still exhibiting very different economic realities across the income spectrum.
+
+To capture these differences, we examine the cumulative income distribution for both types of areas. Comparing the cumulative distributions allows us to see whether metropolitan areas consistently offer higher incomes or whether any advantage only appears at certain points in the income distribution.
+
+Thi graph contains total income after tax encoded along the x-axis, while cumulative proportion of individuals is encoded on the vertical axis. Metropolitan and non-metropolitan areas are differentiated by color, in order to facilitate comparison between distribution.
+
+This graph is zoomed to the 99th percentile. In other words, 99% of people earn less than or equal to the value shown on the axis, and only the top 1% earn more than that. We focus on this range because extremely high incomes can stretch the scale and compress the rest of the distribution, making comparisons harder. 
+
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(scales)
+
+xmax <- quantile(census_clean$income, 0.99, na.rm = TRUE)
+
+cdf_data <- census_clean %>%
+  arrange(income) %>%
+  group_by(area_type) %>%
+  mutate(
+    cum_weight = cumsum(wt),
+    cum_prop = cum_weight / sum(wt)
+  )
+
+ggplot(cdf_data, aes(x = income, y = cum_prop, color = area_type)) +
+  geom_line(linewidth = 1.5) +
+
+  coord_cartesian(xlim = c(0, xmax)) +
+
+  scale_x_continuous(
+    labels = dollar_format(),
+    breaks = pretty_breaks(6)
+  ) +
+
+  scale_y_continuous(
+    labels = percent_format(),
+    breaks = seq(0, 1, 0.2)
+  ) +
+
+  scale_color_manual(
+    values = c(
+      "Metropolitan" = "#E64B35",
+      "Other" = "#2E86AB"
+    )
+  ) +
+
+  labs(
+    title = "Cumulative Income Distribution by Area Type",
+    subtitle = "Distribution truncated at the 99th percentile",
+    x = "After-Tax Income",
+    y = "Cumulative Share of Population",
+    color = "Area Type"
+  ) +
+
+  annotate(
+    "text",
+    x = xmax * 0.17,
+    y = 0.1,
+    label = "Note: Curves show the cumulative share earning up to each income level.\nIncome is truncated at the 99th percentile.",
+    size = 3.6,
+    color = "grey30",
+    hjust = 0
+  ) +
+
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(size = 13, color = "grey30"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+
+```
+
+
+At the lower end of the income distribution, the two curves are almost identical. This suggests that for lower-income individuals, living in a metropolitan versus a non-metropolitan area does not strongly affect income outcomes.
+
+However, as we move toward the middle and upper parts of the distribution, the curves begin to separate slightly. The metropolitan curve shifts to the right, meaning that for the same percentile, incomes tend to be somewhat higher in metropolitan areas.
+
+The difference is not dramatic, but it becomes more noticeable in the higher percentiles. This shows us that metropolitan areas may not raise incomes equally for everyone, but they appear to create more opportunities for higher earnings toward the top of the distribution.
+
+Overall, the pattern indicates that the metropolitan advantage builds gradually across the income distribution rather than appearing suddenly.
+
+But the distribution alone does not tell us __why__ this advantage emerges. To investigate further, we look at how the metropolitan premium differs across fields of study.
+
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(scales)
+
+census_clean <- census_clean %>%
+  mutate(edu = recode(as.character(edu),
+    "1" = "Education",
+    "2" = "Arts & Communications",
+    "3" = "Humanities",
+    "4" = "Social Sciences & Law",
+    "5" = "Business & Public Admin",
+    "6" = "Physical & Life Sciences",
+    "7" = "Math & Computer Science",
+    "8" = "Engineering & Trades",
+    "9" = "Agriculture & Natural Resources",
+    "10" = "Health",
+    "11" = "Personal & Transport Services",
+    "13" = "No Postsecondary Credential",
+    "88" = "Not Available"
+  ))
+
+gap_data <- census_clean %>%
+  group_by(edu, area_type) %>%
+  summarise(
+    median_income = weighted.mean(income, wt),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = area_type, values_from = median_income) %>%
+  mutate(gap = Metropolitan - Other) %>%
+  arrange(gap)
+
+ggplot(gap_data, aes(x = reorder(edu, gap), y = gap, fill = gap)) +
+
+  geom_col(width = 0.7) +
+
+  geom_text(
+    aes(label = dollar(gap)),
+    hjust = -0.1,
+    size = 3
+  ) +
+
+  coord_flip() +
+
+  scale_fill_gradient(
+    low = "#C7D7F0",
+    high = "#1B3C8C",
+    name = "Income Gap"
+  ) +
+
+  scale_y_continuous(
+    labels = dollar_format(),
+    expand = expansion(mult = c(0, .25))   
+  ) +
+
+  labs(
+    title = "Metropolitan Income Premium by Field of Study",
+    subtitle = "Difference in median after-tax income (Metro − Non-metro)",
+    x = "Field of Study",
+    y = "Income Gap"
+  ) +
+
+  theme_minimal(base_size = 13) +
+  theme(
+  plot.title = element_text(face = "bold", size = 11),
+  plot.subtitle = element_text(size = 9, color = "grey40"),
+  axis.text.y = element_text(size = 10),
+  panel.grid.major.y = element_blank(),
+  panel.grid.minor = element_blank()
+)
+
+```
+
+
+This figure shows the income gap between metropolitan and non-metropolitan workers within each field of study (Metro minus Non-metro). Each horizontal bar represents a field, and the length of the bar indicates the size of the metropolitan income premium. Fields with longer bars have a larger difference in median after-tax income between workers in metropolitan and non-metropolitan areas.
+
+The figure reveals that the metropolitan premium varies substantially across fields of study. Some fields show very large income differences between metropolitan and non-metropolitan areas. In particular, Business and Public Administration, Social Sciences and Law, and Math and Computer Science display some of the largest gaps, suggesting that workers in these fields benefit more from being located in large urban labor markets.
+
+Other fields show much smaller differences. Areas such as Education, Personal and Transport Services, and Agriculture and Natural Resources have relatively small metropolitan premiums, indicating that income levels in these occupations are more similar across locations. A few categories even show slightly negative values, such as Physical and Life Sciences and workers without a postsecondary credential, meaning that median incomes outside metropolitan areas can sometimes be comparable to, or slightly higher than, those within cities.
+
+One possible explanation for this pattern is the geographic concentration of certain industries. Fields connected to sectors that cluster in large cities, such as finance, technology, and specialized professional services, tend to offer higher wages in metropolitan areas where these industries are more developed. On the other hand, occupations tied to sectors that are more geographically distributed, like education or natural resources, tend to show smaller location-based differences.
+
+Overall, the figure suggests that the economic return to education is influenced not only by the field of study but also by where that education is used. The same degree may lead to different income outcomes depending on whether workers participate in large metropolitan labor markets or smaller regional economies.
+
+While this figure shows how the metropolitan premium differs across fields of study, it does not tell us how this advantage varies across the income distribution. To better understand who benefits most from metropolitan labor markets, the next analysis compares incomes at different percentiles for metropolitan and non-metropolitan areas.
+
+
+```{r, echo=FALSE}
+library(tidyverse)
+library(scales)
+library(Hmisc)
+library(ggrepel)
+
+q_df <- census_clean %>%
+  group_by(area_type) %>%
+  summarise(
+    p10 = as.numeric(wtd.quantile(income, weights = wt, probs = 0.10, na.rm = TRUE)),
+    p50 = as.numeric(wtd.quantile(income, weights = wt, probs = 0.50, na.rm = TRUE)),
+    p90 = as.numeric(wtd.quantile(income, weights = wt, probs = 0.90, na.rm = TRUE)),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(p10, p50, p90), names_to = "percentile", values_to = "income") %>%
+  mutate(
+    percentile = factor(
+      percentile,
+      levels = c("p10", "p50", "p90"),
+      labels = c("10th", "50th (median)", "90th")
+    )
+  )
+
+ggplot(q_df, aes(x = percentile, y = income, group = area_type, color = area_type)) +
+  geom_line(linewidth = 1.4) +
+  geom_point(size = 3.4) +
+
+geom_text_repel(
+  data = q_df %>% filter(area_type == "Metropolitan"),
+  aes(label = dollar(income)),
+  nudge_y = 7000,
+  direction = "y",
+  size = 4,
+  color = "#E64B35",
+  show.legend = FALSE
+) +
+
+geom_text_repel(
+  data = q_df %>% filter(area_type == "Other"),
+  aes(label = dollar(income)),
+  nudge_y = -7000,
+  direction = "y",
+  size = 4,
+  color = "#2E86AB",
+  show.legend = FALSE
+) +
+
+scale_color_manual(
+  values = c("Metropolitan" = "#E64B35", "Other" = "#2E86AB")
+) +
+
+scale_y_continuous(
+  labels = dollar_format(),
+  breaks = pretty_breaks(5),
+  expand = expansion(mult = c(0.05, 0.18))
+) +
+
+labs(
+  title = "Income Across the Distribution",
+  subtitle = "Weighted percentiles of after-tax income by area type",
+  x = NULL,
+  y = "After-Tax Income",
+  color = "Area Type"
+) +
+
+annotate(
+  "text",
+  x = 1.8,
+  y = 92000,
+  label = "Note: Metro premium increases\nat higher incomes",
+  hjust = 0,
+  size = 3.4,
+  color = "grey30"
+) +
+
+theme_minimal(base_size = 12) +
+theme(
+  plot.title = element_text(face = "bold", size = 18),
+  plot.subtitle = element_text(color = "grey35"),
+  panel.grid.minor = element_blank(),
+  panel.grid.major.x = element_blank(),
+  legend.position = "top",
+  legend.title = element_text(face = "bold")
+)
+```
+
+
+At the 10th percentile, the income difference between metropolitan and non-metropolitan areas is modest. However, by the 90th percentile, the gap becomes much larger. This suggests that metropolitan areas disproportionately benefit higher earners.
+
+In other words, the advantage is not evenly distributed across the income distribution. Instead, it becomes more pronounced toward the upper end. This raises an important implication: cities may amplify both opportunity and inequality. They create space for higher earnings, but that space appears more accessible to individuals already positioned closer to the top of the income distribution. The metropolitan advantage, then, is not universal. It is selective.
+
+This visualization has income percentiles encoded on the horizontal axis and income difference between metropolitan and non-metropolitan areas (at each percentile) in the vertical axis. The connected dots show how metropolitan premium changes across the income distribution. 
+
+While the previous figure showed how the metropolitan advantage grows across the income distribution, it did not reveal whether this pattern is consistent across the country. To explore the geographic dimension of this gap, we now examine how the metropolitan income premium varies across provinces.
+
+ 
+```{r, echo=FALSE}
+library(sf)
+library(geodata)
+library(tidyverse)
+library(scales)
+library(ggiraph)
+
+canada_prov <- geodata::gadm(country = "CAN", level = 1, path = tempdir()) |>
+  st_as_sf()
+
+pr_lookup <- tibble(
+  pr = c(10,11,12,13,24,35,46,47,48,59,60,61,62),
+  prov_name = c(
+    "Newfoundland and Labrador",
+    "Prince Edward Island",
+    "Nova Scotia",
+    "New Brunswick",
+    "Quebec",
+    "Ontario",
+    "Manitoba",
+    "Saskatchewan",
+    "Alberta",
+    "British Columbia",
+    "Yukon",
+    "Northwest Territories",
+    "Nunavut"
+  )
+)
+
+prov_gap <- census_clean %>%
+  mutate(pr = as.integer(PR)) %>%
+  filter(!is.na(pr)) %>%
+  group_by(pr, area_type) %>%
+  summarise(
+    mean_income = weighted.mean(income, wt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = area_type, values_from = mean_income) %>%
+  left_join(pr_lookup, by = "pr") %>%
+  filter(!is.na(prov_name)) %>%                    
+  filter(!is.na(Metropolitan), !is.na(Other)) %>% 
+  mutate(
+    prov_name_clean = case_when(
+      prov_name == "Quebec" ~ "Québec",
+      TRUE ~ prov_name
+    ),
+    gap = Metropolitan - Other
+  )
+
+canada_prov <- canada_prov %>%
+  mutate(prov_name_clean = NAME_1)
+
+canada_prov <- canada_prov %>%
+  filter(prov_name_clean %in% prov_gap$prov_name_clean)
+
+map_df <- canada_prov %>%
+  left_join(
+    prov_gap %>% select(prov_name_clean, gap),
+    by = "prov_name_clean"
+  ) %>%
+  mutate(
+    tooltip_text = paste0(
+      "Province: ", NAME_1,
+      "<br>Income Gap: ", scales::dollar(gap)
+    ),
+    province_id = NAME_1
+  )
+
+p <- ggplot(map_df) +
+  ggiraph::geom_sf_interactive(
+    aes(
+      fill = gap,
+      tooltip = tooltip_text,
+      data_id = province_id
+    ),
+    color = "white",
+    linewidth = 0.2
+  ) +
+  scale_fill_gradient2(
+    low = "white",
+    mid = "grey",
+    high = "darkblue",
+    labels = scales::dollar_format(),
+    na.value = "grey90"
+  ) +
+  labs(
+    title = "Metropolitan Income Premium by Province",
+    subtitle = "Weighted mean after-tax income: Metropolitan minus Other",
+    fill = "Gap"
+  ) +
+  theme_minimal()
+
+ggiraph::girafe(
+  ggobj = p,
+  width_svg = 8,
+  height_svg = 5,
+  options = list(
+    ggiraph::opts_hover(css = "stroke:black;stroke-width:1.5;"),
+    ggiraph::opts_hover_inv(css = "opacity:0.35;"),
+    ggiraph::opts_selection(type = "single", only_shiny = FALSE)
+  )
+)   
+```
+
+The provincial map shows that this pattern does not look the same everywhere in Canada. In some provinces, the metropolitan premium stands out clearly, while in others the difference between metropolitan and non-metropolitan incomes is much smaller. Provinces that contain large economic centers tend to show stronger gaps, suggesting that major cities play an important role in shaping local income opportunities.
+
+Looking at the map makes one thing clear: Canada does not function as a single, unified labor market. Instead, it is a patchwork of regional economies, each influenced by its own industries, population patterns, and economic history. The metropolitan premium exists, but it does not appear equally across the country. It varies from place to place.
+
+Darker shades show larger income gaps, while lighter shades indicate smaller differences. Readers can also hover over each province on the map to see the exact income difference, which makes it easier to explore how the metropolitan premium changes across regions. Provinces are only shaded where sufficient data are available; some regions do not appear because the dataset does not contain reliable metropolitan and non-metropolitan income observations for those areas.
+
+
+```{r, echo=FALSE}
+library(ggrepel)
+
+scatter_data <- census_clean %>%
+  group_by(edu, area_type) %>%
+  summarise(
+    mean_income = weighted.mean(income, wt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(names_from = area_type, values_from = mean_income) %>%
+  filter(!is.na(Metropolitan), !is.na(Other)) %>%
+  mutate(
+    gap = Metropolitan - Other,
+    avg_income = (Metropolitan + Other) / 2
+  )
+
+ggplot(data = scatter_data, aes(x = avg_income, y = gap)) +
+  geom_point(
+    size = 4,
+    shape = 17,
+    color = "purple",
+    alpha = 0.9
+  ) +
+  geom_text_repel(
+    aes(label = edu),
+    size = 3.5,
+    box.padding = 0.4,
+    segment.color = "black"
+  ) +
+  scale_x_continuous(labels = scales::dollar_format()) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(
+    title = "Metropolitan Income Premium and Average Income by Field of Study",
+    x = "Average After-Tax Income",
+    y = "Metropolitan Income Premium"
+  ) +
+  theme_minimal()
+
+```
+
+Our scatter plot was developed to show the relationship between total earnings and metropolitan income premium across the fields of study provided in our dataset. Each point is noted by a triangular shape, with a vertical axis showing metropolitan income premium, while the horizontal axis shows average income after tax. The relationship is clear: the higher the point is above zero, the higher the after-tax income is in the field. As seen in the plot, most points appear above this line, which shows that metropolitan areas offer higher after-tax incomes across a variety of fields. Moreover, the spread of points horizontally shows the variety of income levels, with some fields paying higher than others. Overall, we see the metropolitan premium is present across many fields, which suggest that location contributes to shaping income. 
+
+# Discussion
+
+When we began this analysis, the question felt straightforward: does education lead to higher income equally across Canada?
+
+After working through the data, the answer feels less simple. Clearly, education matters: Across the set, higher levels of education are associated with higher income; these results are unfortunately not surprising. However, what stood out was how geography heavily reshapes this relationship.
+
+Metropolitan areas seem to stretch the upper end of the income distribution. The advantage is not dramatic at the bottom, but it becomes more visible as incomes increase. This pattern suggests that location does not necessarily guarantee higher earnings, but appears to expand opportunities at the top.
+
+This alters the current narrative that education alone levels the playing field. The data suggests something more nuanced; education opens doors, but the economic environment determines how far those doors lead. A degree earned in one location may generate different returns in another, depending on the industries, networks, and labor market structures surrounding it.
+
+More importantly, this does not mean that non-metropolitan regions lack opportunities, rather it highlights that Canada’s economic landscape is not uniform. In other words, different regions operate under different structural conditions. The clustering of high-skilled industries and corporate activity in metropolitan centers likely contributes to the stronger income premiums observed there. In that sense, education is powerful, but it is not standard across geography.
+
+# Limitations 
+
+While this article explores valid points, there are many limitations that can be addressed and improved upon. One limitation includes the fact that income differences cannot be attributed solely to education or geography. Other factors influence earnings, such as years of work experience, employment industry, age, and demand for local labor. Because the dataset focuses on income and education, but does not fully control for these variables, the metropolitan premium observed here should be interpreted as an association rather than a causal effect.
+
+Another limitation is that the analysis categorizes areas into two groups: metropolitan and non-metropolitan. In reality, there is variation within each category. Smaller cities, rural communities, and remote regions may experience different labor market conditions. Future work could improve the analysis by incorporating more detailed geographic classifications or regional labor market indicators.
+
+
+# Conclusion
+
+The relationship between education and income in Canada is more complex than initially expected. Metropolitan areas show a quantifiable income premium, especially among higher earners and within certain fields of study. At lower income levels, the gap becomes more narrow, while, as incomes rise, the metropolitan advantage becomes more pronounced.
+
+This suggests that while education increases potential earnings, its economic payoff depends partly on where individuals apply it. Geography does not override education, but it shapes its impact. Ultimately, this project reinforced a simple but essential idea: opportunity is spatial. Education may provide the skills and credentials, but regional economic structures influence how those skills are rewarded.
+
+If education is meant to be a pathway to mobility, then understanding the geography of its returns becomes essential. The data does not show a country divided into winners and losers, but rather reveals a country where place matters more than we might assume.
+
+# Gen AI Statement: 
+Generative AI was used for the editing and formatting of our text, as well as debugging.
+
+
+
